@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时间记录器（导出带BOM头的CSV）</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 10px; 
+            font-size: 16px; 
+        }
+        #timeRecords div { 
+            margin: 5px 0; 
+            padding: 10px; 
+            background-color: #f0f0f0; 
+        }
+        button { 
+            padding: 15px 30px; 
+            background-color: #4CAF50; 
+            color: white; 
+            border: none; 
+            cursor: pointer; 
+            font-size: 16px; 
+            margin: 5px 0; 
+        }
+        button:hover { 
+            background-color: #45a049; 
+        }
+        #eventList { 
+            margin-bottom: 20px; 
+        }
+        #eventList input { 
+            margin-right: 10px; 
+            padding: 10px; 
+            font-size: 16px; 
+            width: 60%; 
+        }
+        #eventList button { 
+            margin-left: 10px; 
+            padding: 10px 20px; 
+            font-size: 16px; 
+        }
+        .event-tag { 
+            display: inline-block; 
+            padding: 5px 10px; 
+            background-color: #d1e7dd; 
+            border-radius: 5px; 
+            margin-left: 10px; 
+            font-size: 14px; 
+        }
+        .record-container { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-start; 
+            gap: 10px; 
+            padding: 10px; 
+        }
+        .event-select { 
+            padding: 10px; 
+            border-radius: 5px; 
+            border: 1px solid #ccc; 
+            font-size: 16px; 
+            width: 100%; 
+        }
+    </style>
+</head>
+<body>
+    <div id="currentDate"></div>
+    <div id="eventList">
+        <input type="text" id="newEvent" placeholder="输入新事件">
+        <button onclick="addEvent()">添加事件</button>
+    </div>
+    <button onclick="recordTime()">记录时间</button>
+    <button onclick="exportToCSV()">导出表格</button>
+    <div id="timeRecords"></div>
+
+    <script>
+        const initDate = new Date();
+        let startTime = new Date(initDate);
+        startTime.setHours(0, 0, 0, 0);
+        let endTime = new Date(startTime);
+
+        let events = ["睡觉", "饮食", "学习"];
+        let records = [];
+
+        document.getElementById('currentDate').textContent = 
+            initDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+        // 时间格式化（保持hh:mm:ss）
+        function formatTime(date) {
+            return date.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false 
+            });
+        }
+
+        // 修改后的时长计算函数
+        function calculateDuration(start, end) {
+            const diffMs = end - start;
+            const hours = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
+            const minutes = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
+            const seconds = Math.floor((diffMs % 60000) / 1000).toString().padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+
+        function addEvent() {
+            const newEvent = document.getElementById('newEvent').value.trim();
+            if (newEvent && !events.includes(newEvent)) {
+                events.push(newEvent);
+                renderEventSelectors();
+                document.getElementById('newEvent').value = '';
+            }
+        }
+
+        function renderEventSelectors() {
+            const selects = document.querySelectorAll('.event-select');
+            selects.forEach(select => {
+                select.innerHTML = events.map(event => `<option value="${event}">${event}</option>`).join('');
+            });
+        }
+
+        function recordTime() {
+            const currentTime = new Date();
+            
+            startTime = new Date(endTime);
+            endTime = currentTime;
+            
+            const startTimeStr = formatTime(startTime);
+            const endTimeStr = formatTime(endTime);
+            const duration = calculateDuration(startTime, endTime);
+
+            const record = document.createElement('div');
+            record.className = 'record-container';
+            record.innerHTML = `
+                <span>${startTimeStr} - ${endTimeStr}，持续时间：${duration}</span>
+                <select class="event-select" onchange="markEvent(this)">
+                <option value="">选择事件</option>
+                ${events.map(event => `<option value="${event}">${event}</option>`).join('')}
+                </select>
+            `;
+            
+            // 修改1：将 prepend 改为 append
+            document.getElementById('timeRecords').append(record);
+
+            // 修改2：将 unshift 改为 push
+            records.push({
+                date: initDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+                startTime: startTimeStr,
+                endTime: endTimeStr,
+                duration: duration,
+                event: null
+            });
+        }
+
+        function markEvent(select) {
+            const event = select.value;
+            if (event) {
+                const eventTag = document.createElement('span');
+                eventTag.className = 'event-tag';
+                eventTag.textContent = event;
+                select.parentNode.insertBefore(eventTag, select);
+                select.remove();
+
+                const index = Array.from(document.getElementById('timeRecords').children).indexOf(select.parentNode);
+                records[index].event = event;
+            }
+        }
+
+        function exportToCSV() {
+            const csvContent = "\uFEFF" +
+                "日期,起始时间,结束时间,时长,事件\n" +
+                records.map(record => 
+                    `${record.date},${record.startTime},${record.endTime},${record.duration},${record.event || ''}`
+                ).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "时间记录.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        renderEventSelectors();
+    </script>
+</body>
+</html>
